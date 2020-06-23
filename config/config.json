@@ -1,0 +1,58 @@
+{
+  "dev": {
+    "username": "root",
+    "password": "",
+    "database": "my-studio-dev",
+    "host": "127.0.0.1",
+    "dialect": "mysql",
+    "seederStorage": "sequelize",
+    "pool": {
+      "max": 100,
+      "min": 0,
+      "idle": 20000,
+      "acquire": 20000
+    }
+  },
+  "staging": {
+    "username": "master",
+    "password": "mystudiostaging",
+    "database": "mystudiostaging",
+    "host": "mrzp85ryt2d6wg.cjvj92boempd.us-west-2.rds.amazonaws.com",
+    "dialect": "mysql",
+    "seederStorage": "sequelize",
+    "pool": {
+      "max": 5,
+      "min": 0,
+      "idle": 30000,
+      "acquire": 60000
+    }
+  },
+  "staging-old": {
+    "username": "root",
+    "password": "mystudiostaging",
+    "database": "mystudiostaging",
+    "host": "my-studio-staging.cjvj92boempd.us-west-2.rds.amazonaws.com",
+    "dialect": "mysql",
+    "seederStorage": "sequelize",
+    "pool": {
+      "max": 100,
+      "min": 0,
+      "idle": 20000,
+      "acquire": 20000
+    }
+  },
+  "production": {
+    "username": "root",
+    "password": "mystudioprod",
+    "database": "my-studio-prod",
+    "host": "my-studio-prod.cluster-cjvj92boempd.us-west-2.rds.amazonaws.com",
+    "dialect": "mysql",
+    "seederStorage": "sequelize",
+    "maxConcurrentQueries": 100,
+    "dialectOptions": {
+        "ssl":"Amazon RDS"
+    },
+    "pool": { "maxConnections": 5, "maxIdleTime": 30},
+    "language": "en"
+  }
+}

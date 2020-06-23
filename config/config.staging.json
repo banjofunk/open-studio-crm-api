@@ -1,0 +1,6 @@
+{
+  "securityGroup": "sg-0ddc664afaccb6538",
+  "subnet1": "subnet-0fb27f7d9b9e5d057",
+  "subnet2": "subnet-008262e6cf1de97bd",
+  "subnetNat": "subnet-01a5d8c8f74511392"
+}

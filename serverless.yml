@@ -1,0 +1,579 @@
+service: my-studio-api
+
+provider:
+  name: aws
+  runtime: nodejs8.10
+  stage: ${opt:stage, self:custom.default_stage}
+  versionFunctions: false
+  environment:
+    STAGE: ${self:provider.stage}
+    ClassEventUserQueueArn:
+      Fn::GetAtt:
+        - ClassEventUserQueue
+        - Arn
+    ClassEventsQueueArn:
+      Fn::GetAtt:
+        - ClassEventsQueue
+        - Arn
+    ParserQueueUrl:
+      Ref: ParserQueue
+  timeout: 30
+  region: us-west-2
+  tags:
+    Project: my-studio-api
+    Environment: ${opt:stage, 'dev'}
+  vpc:
+    securityGroupIds:
+      - ${file(config/config.${self:provider.stage}.json):securityGroup}
+    subnetIds:
+      - ${file(config/config.${self:provider.stage}.json):subnet1}
+      - ${file(config/config.${self:provider.stage}.json):subnet2}
+  iamRoleStatements:
+    - Effect: 'Allow'
+      Action:
+        - 'lambda:*'
+        - 'dynamodb:*'
+        - 'sqs:*'
+      Resource: '*'
+
+custom:
+  splitStacks:
+    perType: true
+  default_stage: dev
+  webpackIncludeModules: true
+  webpack:
+    webpackConfig: ./webpack.config.js
+    packager: 'yarn'
+  authorizer:
+    arn: arn:aws:cognito-idp:us-west-2:285012317380:userpool/us-west-2_l97F1wJ5A
+  serverless-offline-sqs:
+    apiVersion: '2012-11-05'
+    endpoint: http://localhost:9324
+    region: ${self:provider.region}
+    accessKeyId: root
+    secretAccessKey: root
+    skipCacheInvalidation: false
+
+
+functions:
+## ClassTypes ###
+  processParserQueue:
+    handler: functions/processParserQueue.handler
+    timeout: 90
+    reservedConcurrency: 2
+    vpc:
+      securityGroupIds:
+        - ${file(config/config.${self:provider.stage}.json):securityGroup}
+      subnetIds:
+        - ${file(config/config.${self:provider.stage}.json):subnetNat}
+    events:
+      - sqs:
+          batchSize: 4
+          arn:
+            Fn::GetAtt: [ ParserQueue, Arn ]
+  importMindbodyData:
+    handler: functions/importMindbodyData/importMindbodyData.handler
+    timeout: 90
+    reservedConcurrency: 8
+    vpc:
+      securityGroupIds:
+        - ${file(config/config.${self:provider.stage}.json):securityGroup}
+      subnetIds:
+        - ${file(config/config.${self:provider.stage}.json):subnetNat}
+  importMbResources:
+    handler: functions/importScraperData.resources
+  importScraperDataClassTypes:
+    handler: functions/importScraperData.classTypes
+  importScraperDataProducts:
+    handler: functions/importScraperData.products
+  importScraperDataUsers:
+    handler: functions/importScraperData.users
+    events:
+      - http:
+          path: import-scraper-data/users
+          method: get
+
+### ClassTypes ###
+  classTypeIndex:
+    handler: functions/classTypes.index
+    events:
+      - http:
+          path: organizations/{organizationId}/class-types
+          method: get
+          cors: true
+          authorizer: ${self:custom.authorizer}
+          requests:
+            parameters:
+              paths:
+                organizationId: true
+  classTypeShow:
+    handler: functions/classTypes.show
+    events:
+      - http:
+          path: organizations/{organizationId}/class-types/{classTypeId}
+          method: get
+          cors: true
+          authorizer: ${self:custom.authorizer}
+          requests:
+            parameters:
+              paths:
+                organizationId: true
+                classTypeId: true
+  classTypeCreate:
+    handler: functions/classTypes.create
+    events:
+      - http:
+          path: organizations/{organizationId}/class-types
+          method: post
+          cors: true
+          authorizer: ${self:custom.authorizer}
+          requests:
+            parameters:
+              paths:
+                organizationId: true
+  classTypeUpdate:
+    handler: functions/classTypes.update
+    events:
+      - http:
+          path: organizations/{organizationId}/class-types/{classTypeId}
+          method: put
+          cors: true
+          authorizer: ${self:custom.authorizer}
+          requests:
+            parameters:
+              paths:
+                organizationId: true
+                classTypeId: true
+  classTypeDelete:
+    handler: functions/classTypes.delete
+    events:
+      - http:
+          path: organizations/{organizationId}/class-types/{classTypeId}
+          method: delete
+          cors: true
+          authorizer: ${self:custom.authorizer}
+          requests:
+            parameters:
+              paths:
+                organizationId: true
+                classTypeId: true
+
+### classEvents ###
+  classEventIndex:
+    handler: functions/classEvents.index
+    events:
+      - http:
+          path: organizations/{organizationId}/class-events
+          method: get
+          cors: true
+          authorizer: ${self:custom.authorizer}
+          requests:
+            parameters:
+              paths:
+                organizationId: true
+  classEventShow:
+    handler: functions/classEvents.show
+    events:
+      - http:
+          path: class-events/{classTypeId}/{classDate}
+          method: get
+          cors: true
+          authorizer: ${self:custom.authorizer}
+          requests:
+            parameters:
+              paths:
+                classTypeId: true
+                classDate: true
+
+### classEventUsers ###
+  classEventUserCreate:
+    handler: functions/classEventUsers.create
+    events:
+      - http:
+          path: organizations/{organizationId}/class-event-users
+          method: post
+          cors: true
+          authorizer: ${self:custom.authorizer}
+          requests:
+            parameters:
+              paths:
+                organizationId: true
+  classEventUserDelete:
+    handler: functions/classEventUsers.delete
+    events:
+      - http:
+          path: class-event-users/removeUser
+          method: post
+          cors: true
+          authorizer: ${self:custom.authorizer}
+### Organization ###
+  organizationIndex:
+    handler: functions/organizations.index
+    events:
+      - http:
+          path: organizations
+          method: get
+          cors: true
+          authorizer: ${self:custom.authorizer}
+  organizationShow:
+    handler: functions/organizations.show
+    events:
+      - http:
+          path: organizations/{organizationId}
+          method: get
+          cors: true
+          authorizer: ${self:custom.authorizer}
+          requests:
+            parameters:
+              paths:
+                organizationId: true
+
+### Products ###
+  productIndex:
+    handler: functions/products.index
+    events:
+      - http:
+          path: organizations/{organizationId}/products
+          method: get
+          cors: true
+          authorizer: ${self:custom.authorizer}
+          requests:
+            parameters:
+              paths:
+                organizationId: true
+                productId: true
+  productShow:
+    handler: functions/products.show
+    events:
+      - http:
+          path: products/{productId}
+          method: get
+          cors: true
+          authorizer: ${self:custom.authorizer}
+          requests:
+            parameters:
+              paths:
+                productId: true
+  productCreate:
+    handler: functions/products.create
+    events:
+      - http:
+          path: organizations/{organizationId}/products
+          method: post
+          cors: true
+          authorizer: ${self:custom.authorizer}
+          requests:
+            parameters:
+              paths:
+                organizationId: true
+  productUpdate:
+    handler: functions/products.update
+    events:
+      - http:
+          path: organizations/{organizationId}/products/{productId}
+          method: put
+          cors: true
+          authorizer: ${self:custom.authorizer}
+          requests:
+            parameters:
+              paths:
+                organizationId: true
+                productId: true
+  productDelete:
+    handler: functions/products.delete
+    events:
+      - http:
+          path: organizations/{organizationId}/products/{productId}
+          method: delete
+          cors: true
+          authorizer: ${self:custom.authorizer}
+          requests:
+            parameters:
+              paths:
+                organizationId: true
+                productId: true
+### User ###
+  userIndex:
+    handler: functions/users.index
+    events:
+      - http:
+          path: organizations/{organizationId}/users
+          method: get
+          cors: true
+          authorizer: ${self:custom.authorizer}
+          requests:
+            parameters:
+              paths:
+                organizationId: true
+  userCreate:
+    handler: functions/users.create
+    events:
+      - http:
+          path: organizations/{organizationId}/users
+          method: post
+          cors: true
+          requests:
+            parameters:
+              paths:
+                organizationId: true
+  userShow:
+    handler: functions/users.show
+    events:
+      - http:
+          path: users/{userId}
+          method: get
+          cors: true
+          authorizer: ${self:custom.authorizer}
+          requests:
+            parameters:
+              paths:
+                userId: true
+  userUpdate:
+    handler: functions/users.update
+    events:
+      - http:
+          path: users/{userId}
+          method: put
+          cors: true
+          authorizer: ${self:custom.authorizer}
+          requests:
+            parameters:
+              paths:
+                userId: true
+  userDelete:
+    handler: functions/users.delete
+    events:
+      - http:
+          path: users/{userId}
+          method: delete
+          cors: true
+          authorizer: ${self:custom.authorizer}
+          requests:
+            parameters:
+              paths:
+                userId: true
+
+### StaffMember ###
+  staffMemberIndex:
+    handler: functions/staffMembers.index
+    events:
+      - http:
+          path: organizations/{organizationId}/staff-members
+          method: get
+          cors: true
+          authorizer: ${self:custom.authorizer}
+          requests:
+            parameters:
+              paths:
+                organizationId: true
+  staffMemberCreate:
+    handler: functions/staffMembers.create
+    events:
+      - http:
+          path: organizations/{organizationId}/staff-members
+          method: post
+          cors: true
+          authorizer: ${self:custom.authorizer}
+          requests:
+            parameters:
+              paths:
+                organizationId: true
+  staffMemberShow:
+    handler: functions/staffMembers.show
+    events:
+      - http:
+          path: staff-members/{staffMemberId}
+          method: get
+          cors: true
+          authorizer: ${self:custom.authorizer}
+          requests:
+            parameters:
+              paths:
+                staffMemberId: true
+  staffMemberUpdate:
+    handler: functions/staffMembers.update
+    events:
+      - http:
+          path: staff-members/{staffMemberId}
+          method: put
+          cors: true
+          authorizer: ${self:custom.authorizer}
+          requests:
+            parameters:
+              paths:
+                staffMemberId: true
+  staffMemberDelete:
+    handler: functions/staffMembers.delete
+    events:
+      - http:
+          path: staff-members/{staffMemberId}
+          method: delete
+          cors: true
+          authorizer: ${self:custom.authorizer}
+          requests:
+            parameters:
+              paths:
+                staffMemberId: true
+### Location ###
+  locationIndex:
+    handler: functions/locations.index
+    events:
+      - http:
+          path: organizations/{organizationId}/locations
+          method: get
+          cors: true
+          authorizer: ${self:custom.authorizer}
+          requests:
+            parameters:
+              paths:
+                organizationId: true
+  locationCreate:
+    handler: functions/locations.create
+    events:
+      - http:
+          path: organizations/{organizationId}/locations
+          method: post
+          cors: true
+          authorizer: ${self:custom.authorizer}
+          requests:
+            parameters:
+              paths:
+                organizationId: true
+  locationShow:
+    handler: functions/locations.show
+    events:
+      - http:
+          path: organizations/{organizationId}/locations/{locationId}
+          method: get
+          cors: true
+          authorizer: ${self:custom.authorizer}
+          requests:
+            parameters:
+              paths:
+                locationId: true
+                organizationId: true
+  locationUpdate:
+    handler: functions/locations.update
+    events:
+      - http:
+          path: organizations/{organizationId}/locations/{locationId}
+          method: put
+          cors: true
+          authorizer: ${self:custom.authorizer}
+          requests:
+            parameters:
+              paths:
+                organizationId: true
+                locationId: true
+  locationDelete:
+    handler: functions/locations.delete
+    events:
+      - http:
+          path: organizations/{organizationId}/locations/{locationId}
+          method: delete
+          cors: true
+          authorizer: ${self:custom.authorizer}
+          requests:
+            parameters:
+              paths:
+                organizationId: true
+                locationId: true
+### Room ###
+  roomIndex:
+    handler: functions/rooms.index
+    events:
+      - http:
+          path: locations/{locationId}/rooms
+          method: get
+          cors: true
+          authorizer: ${self:custom.authorizer}
+          requests:
+            parameters:
+              paths:
+                locationId: true
+  roomShow:
+    handler: functions/rooms.show
+    events:
+      - http:
+          path: rooms/{roomId}
+          method: get
+          cors: true
+          authorizer: ${self:custom.authorizer}
+          requests:
+            parameters:
+              paths:
+                roomId: true
+  roomCreate:
+    handler: functions/rooms.create
+    events:
+      - http:
+          path: locations/{locationId}/rooms
+          method: post
+          cors: true
+          authorizer: ${self:custom.authorizer}
+          requests:
+            parameters:
+              paths:
+                locationId: true
+                organizationId: true
+  roomUpdate:
+    handler: functions/rooms.update
+    events:
+      - http:
+          path: rooms/{roomId}
+          method: put
+          cors: true
+          authorizer: ${self:custom.authorizer}
+          requests:
+            parameters:
+              paths:
+                organizationId: true
+                roomId: true
+  roomDelete:
+    handler: functions/rooms.delete
+    events:
+      - http:
+          path: rooms/{roomId}
+          method: delete
+          cors: true
+          authorizer: ${self:custom.authorizer}
+          requests:
+            parameters:
+              paths:
+                roomId: true
+                organizationId: true
+
+### Staff ###
+  staffShow:
+    handler: functions/staff.show
+    events:
+      - http:
+          path: staff/{staffId}
+          method: get
+          cors: true
+          authorizer: ${self:custom.authorizer}
+          requests:
+            parameters:
+              paths:
+                staffId: true
+resources:
+  Resources:
+    ClassEventsQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: my-studio-api-${self:provider.stage}-ClassEventsQueue
+    ClassEventUserQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: my-studio-api-${self:provider.stage}-ClassEventUserQueue
+    ParserQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: my-studio-api-${self:provider.stage}-ParserQueue
+        VisibilityTimeout: 90
+
+plugins:
+  - serverless-webpack
+  - serverless-offline
+  - serverless-iam-roles-per-function
+  - serverless-plugin-split-stacks

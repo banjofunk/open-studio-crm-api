@@ -1,0 +1,24 @@
+version: 0.2
+phases:
+  install:
+    commands:
+      - echo Entered the install phase...
+      - apt-get update -y
+      - apt-get install apt-transport-https
+      - curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | apt-key add -
+      - echo "deb https://dl.yarnpkg.com/debian/ stable main" | tee /etc/apt/sources.list.d/yarn.list
+      - apt-get update -y
+      - apt-get install -y yarn
+  pre_build:
+    commands:
+      - yarn global add serverless sequelize-cli mysql2 mysql
+      - yarn install
+  build:
+    commands:
+      - serverless deploy --stage staging
+  post_build:
+    commands:
+      - sequelize db:drop --env staging
+      - sequelize db:create --env staging
+      - sequelize db:migrate --env staging
+      - sequelize db:seed:all --env staging
